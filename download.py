@@ -4,6 +4,8 @@ import traceback
 import requests
 import logging
 import flickrapi
+import argparse
+
 import KEYS
 
 logging.basicConfig(level=logging.INFO)
@@ -20,7 +22,6 @@ LICENSE_ACTIONS = {
     '5': LICENSE_TEXT_DEFAULT,
     '6': LICENSE_TEXT_DEFAULT,
 }
-TAGS = ['cat', 'funny']
 
 OWNERS = {}
 
@@ -50,17 +51,29 @@ def license_default_action(text, **context):
     with open(path_credit, 'w') as f:
         f.write(text.format_map(context))
 
+arg_parser = argparse.ArgumentParser(description='download images by tag from flickr (including their license information)')
+arg_parser.add_argument('-p', '--pages', dest='pages', type=int, default=1, help="download all images on pages up to PAGES")
+arg_parser.add_argument('--perpage', type=int, default=50, help="search query should have PERPAGES images per page")
+arg_parser.add_argument('--skip', type=int, default=0, help="skip the first SKIP pages")
+arg_parser.add_argument('--nolicense', action='store_true', default=False, help="do not create license files for images")
+arg_parser.add_argument('--exclude', action='append', help="add these tags with leading - to search")
+arg_parser.add_argument('--any', action='store_true', default=False, help="tags are OR combined in stead of AND")
+arg_parser.add_argument('tag', nargs='+', help="search images by these tags")
 
 if __name__ == '__main__':
+
+    args = arg_parser.parse_args()
+    logging.info(args)
 
     flickr = flickrapi.FlickrAPI(api_key=KEYS.API_KEY, secret=KEYS.API_SECRET, format='parsed-json')
     licenses = {x['id']: x for x in flickr.photos.licenses.getInfo()['licenses']['license']}
 
-    pages = range(1, 20)
-
-    for page in pages:
-        search = flickr.photos.search(tags=','.join(TAGS), tag_mode='all', license=','.join(LICENSES_OK),
-                                      extras='license,owner_name,url_z,url_o', page=page)
+    for page in range(1 + args.skip, args.pages + 1):
+        search = flickr.photos.search(tags=','.join(args.tag) + ','.join(map(lambda x: '-%s' % x, args.exclude)),
+                                      tag_mode='all' if args.any else 'any',
+                                      page=page, per_page=args.perpage,
+                                      license=','.join(LICENSES_OK),
+                                      extras='license,url_z,url_o', media='photo', content_type=1)
 
         for photo in search['photos']['photo']:
             try:
@@ -73,7 +86,7 @@ if __name__ == '__main__':
                     continue
                 logging.info("downloading {url}".format(**photo))
                 save_url_as(photo['url'], path)
-                if photo['license'] in LICENSE_ACTIONS:
+                if not args.nolicense and photo['license'] in LICENSE_ACTIONS:
                     action = LICENSE_ACTIONS[photo['license']]
                     context = {'photo': photo, 'license': licenses[photo['license']], 'owner': get_owner(photo['owner'])}
                     if hasattr(action, '__call__'):
