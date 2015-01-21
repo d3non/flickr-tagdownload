@@ -1,4 +1,6 @@
 import os.path
+import sys
+import traceback
 import requests
 import logging
 import flickrapi
@@ -28,6 +30,12 @@ def safe_url_as(url, path):
     else:
         raise Exception("error downloading {}, status_code was {}".format(url, r.status_code))
 
+
+def etree_elem_text(etree, name, default=""):
+    element = etree.find(name)
+    return element.text if element else default
+
+
 if __name__ == '__main__':
 
     flickr = flickrapi.FlickrAPI(api_key=KEYS.API_KEY, secret=KEYS.API_SECRET)
@@ -55,7 +63,9 @@ if __name__ == '__main__':
                     owner = get_owner_name(p.get('owner'))
                     path_credit = "{}.credit".format(p.get('id'))
                     with open(path_credit, 'w') as f:
-                        owner_name = owner.find('realname').text
-                        f.write("{name} ({url})".format(name=owner_name, url=owner.find('profileurl').text))
+                        f.write("{name} ({url})".format(name=etree_elem_text(owner, 'realname', 'unknown'),
+                                                        url=etree_elem_text(owner, 'profileurl')))
             except Exception as e:
-                logging.warning(e)
+                print('-'*60)
+                traceback.print_exc(file=sys.stdout)
+                print('-'*60)
