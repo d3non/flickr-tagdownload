@@ -2,3 +2,5 @@
 .idea
 *.pyc
 KEYS.py
+__pycache__
+tmp/
