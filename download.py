@@ -9,15 +9,28 @@ import KEYS
 logging.basicConfig(level=logging.INFO)
 
 LICENSES_OK = set(map(str, range(1, 8)))  # see https://www.flickr.com/services/api/flickr.photos.licenses.getInfo.html
+LICENSE_TEXT_DEFAULT = """Image by '{owner[realname][_content]}' ({owner[profileurl][_content]})
+Shared under the {license[name]} ({license[url]})
+"""
+LICENSE_ACTIONS = {
+    '1': LICENSE_TEXT_DEFAULT,
+    '2': LICENSE_TEXT_DEFAULT,
+    '3': LICENSE_TEXT_DEFAULT,
+    '4': LICENSE_TEXT_DEFAULT,
+    '5': LICENSE_TEXT_DEFAULT,
+    '6': LICENSE_TEXT_DEFAULT,
+}
 TAGS = ['cat', 'funny']
 
 OWNERS = {}
 
 
-def get_owner_name(user_id):
+def get_owner(user_id):
     if user_id not in OWNERS:
-        r = flickr.people.getInfo(user_id=user_id)
-        OWNERS[user_id] = r.find('person')
+        user = flickr.people.getInfo(user_id=user_id)['person']
+        if 'realname' not in user:
+            user['realname'] = {'_content': ""}
+        OWNERS[user_id] = user
     return OWNERS[user_id]
 
 
@@ -31,40 +44,42 @@ def safe_url_as(url, path):
         raise Exception("error downloading {}, status_code was {}".format(url, r.status_code))
 
 
-def etree_elem_text(etree, name, default=""):
-    element = etree.find(name)
-    return element.text if element else default
+def license_default_action(text, **context):
+    path_credit = "{photo[id]}.license".format_map(context)
+    logging.info("writing license file: %s" % path_credit)
+    with open(path_credit, 'w') as f:
+        f.write(text.format_map(context))
 
 
 if __name__ == '__main__':
 
-    flickr = flickrapi.FlickrAPI(api_key=KEYS.API_KEY, secret=KEYS.API_SECRET)
+    flickr = flickrapi.FlickrAPI(api_key=KEYS.API_KEY, secret=KEYS.API_SECRET, format='parsed-json')
+    licenses = {x['id']: x for x in flickr.photos.licenses.getInfo()['licenses']['license']}
 
-    pages = range(1,20)
+    pages = range(1, 20)
 
     for page in pages:
-        photos = flickr.photos.search(tags=','.join(TAGS), tag_mode='all', license=','.join(LICENSES_OK),
+        search = flickr.photos.search(tags=','.join(TAGS), tag_mode='all', license=','.join(LICENSES_OK),
                                       extras='license,owner_name,url_z,url_o', page=page)
 
-        for p in photos[0]:
-            url = p.get('url_z')
-            if url is None:
-                continue
-            path = "{}.jpg".format(p.get('id'))
-            if os.path.isfile(path):
-                logging.warning("already downloaded image:{}".format(p.get('id')))
-                continue
+        for photo in search['photos']['photo']:
             try:
-                logging.info("downloading {}".format(url))
-                safe_url_as(url, path)
-                license_ = int(p.get('license'))
-                if license_ in set(range(1, 7)):
-                    logging.info("writing ownership file, since license={}".format(license_))
-                    owner = get_owner_name(p.get('owner'))
-                    path_credit = "{}.credit".format(p.get('id'))
-                    with open(path_credit, 'w') as f:
-                        f.write("{name} ({url})".format(name=etree_elem_text(owner, 'realname', 'unknown'),
-                                                        url=etree_elem_text(owner, 'profileurl')))
+                photo['url'] = photo['url_z']
+                if photo['url'] is None:
+                    continue
+                path = "{id}.jpg".format(**photo)
+                if os.path.isfile(path):
+                    logging.warning("already downloaded image:{id}".format_map(photo))
+                    continue
+                logging.info("downloading {url}".format(**photo))
+                safe_url_as(photo['url'], path)
+                if photo['license'] in LICENSE_ACTIONS:
+                    action = LICENSE_ACTIONS[photo['license']]
+                    context = {'photo': photo, 'license': licenses[photo['license']], 'owner': get_owner(photo['owner'])}
+                    if hasattr(action, '__call__'):
+                        action(**context)
+                    else:
+                        license_default_action(text=action, **context)
             except Exception as e:
                 print('-'*60)
                 traceback.print_exc(file=sys.stdout)
