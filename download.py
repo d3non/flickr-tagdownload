@@ -1,4 +1,4 @@
-import os.path
+import os
 import sys
 import traceback
 import requests
@@ -46,17 +46,18 @@ def save_url_as(url, path):
 
 
 def license_default_action(text, **context):
-    path_credit = "{photo[id]}.license".format_map(context)
+    path_credit = os.path.join(context['BASE_PATH'], "{photo[id]}.license".format_map(context))
     logging.info("writing license file: %s" % path_credit)
     with open(path_credit, 'w') as f:
         f.write(text.format_map(context))
 
 arg_parser = argparse.ArgumentParser(description='download images by tag from flickr (including their license information)')
+arg_parser.add_argument('--directory', help="save images in DIRECTORY")
 arg_parser.add_argument('-p', '--pages', dest='pages', type=int, default=1, help="download all images on pages up to PAGES")
 arg_parser.add_argument('--perpage', type=int, default=50, help="search query should have PERPAGES images per page")
 arg_parser.add_argument('--skip', type=int, default=0, help="skip the first SKIP pages")
 arg_parser.add_argument('--nolicense', action='store_true', default=False, help="do not create license files for images")
-arg_parser.add_argument('--exclude', action='append', help="add these tags with leading - to search")
+arg_parser.add_argument('--exclude', action='append', default=[], help="add these tags with leading - to search")
 arg_parser.add_argument('--any', action='store_true', default=False, help="tags are OR combined in stead of AND")
 arg_parser.add_argument('tag', nargs='+', help="search images by these tags")
 
@@ -67,6 +68,12 @@ if __name__ == '__main__':
 
     flickr = flickrapi.FlickrAPI(api_key=KEYS.API_KEY, secret=KEYS.API_SECRET, format='parsed-json')
     licenses = {x['id']: x for x in flickr.photos.licenses.getInfo()['licenses']['license']}
+
+    BASE_PATH = ""
+    if 'directory' in args and args.directory:
+        if not os.path.exists(args.directory):
+            os.makedirs(args.directory)
+        BASE_PATH = args.directory
 
     for page in range(1 + args.skip, args.pages + 1):
         search = flickr.photos.search(tags=','.join(args.tag) + ','.join(map(lambda x: '-%s' % x, args.exclude)),
@@ -80,7 +87,7 @@ if __name__ == '__main__':
                 photo['url'] = photo['url_z']
                 if photo['url'] is None:
                     continue
-                path = "{id}.jpg".format(**photo)
+                path = os.path.join(BASE_PATH, "{id}.jpg".format(**photo))
                 if os.path.isfile(path):
                     logging.warning("already downloaded image:{id}".format_map(photo))
                     continue
@@ -88,7 +95,8 @@ if __name__ == '__main__':
                 save_url_as(photo['url'], path)
                 if not args.nolicense and photo['license'] in LICENSE_ACTIONS:
                     action = LICENSE_ACTIONS[photo['license']]
-                    context = {'photo': photo, 'license': licenses[photo['license']], 'owner': get_owner(photo['owner'])}
+                    context = {'photo': photo, 'license': licenses[photo['license']],
+                               'owner': get_owner(photo['owner']), 'BASE_PATH': BASE_PATH}
                     if hasattr(action, '__call__'):
                         action(**context)
                     else:
