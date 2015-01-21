@@ -77,7 +77,7 @@ if __name__ == '__main__':
 
     for page in range(1 + args.skip, args.pages + 1):
         search = flickr.photos.search(tags=','.join(args.tag) + ','.join(map(lambda x: '-%s' % x, args.exclude)),
-                                      tag_mode='all' if args.any else 'any',
+                                      tag_mode='all' if not args.any else 'any',
                                       page=page, per_page=args.perpage,
                                       license=','.join(LICENSES_OK),
                                       extras='license,url_z,url_o', media='photo', content_type=1)
