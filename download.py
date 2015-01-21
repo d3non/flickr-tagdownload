@@ -34,7 +34,7 @@ def get_owner(user_id):
     return OWNERS[user_id]
 
 
-def safe_url_as(url, path):
+def save_url_as(url, path):
     r = requests.get(url, stream=True)
     if r.status_code == 200:
         with open(path, 'wb') as f:
@@ -72,7 +72,7 @@ if __name__ == '__main__':
                     logging.warning("already downloaded image:{id}".format_map(photo))
                     continue
                 logging.info("downloading {url}".format(**photo))
-                safe_url_as(photo['url'], path)
+                save_url_as(photo['url'], path)
                 if photo['license'] in LICENSE_ACTIONS:
                     action = LICENSE_ACTIONS[photo['license']]
                     context = {'photo': photo, 'license': licenses[photo['license']], 'owner': get_owner(photo['owner'])}
