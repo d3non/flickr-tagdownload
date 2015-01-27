@@ -14,6 +14,7 @@ LICENSES_OK = set(map(str, range(1, 8)))  # see https://www.flickr.com/services/
 LICENSE_TEXT_DEFAULT = """Image by '{owner[realname][_content]}' ({owner[profileurl][_content]})
 Shared under the {license[name]} ({license[url]})
 """
+LICENSE_TEXT_DEFAULT_CSV = """{owner[realname][_content]},{owner[profileurl][_content]},{license[name]},{license[url]}"""
 LICENSE_ACTIONS = {
     '1': LICENSE_TEXT_DEFAULT,
     '2': LICENSE_TEXT_DEFAULT,
@@ -53,6 +54,7 @@ def license_default_action(text, **context):
 
 arg_parser = argparse.ArgumentParser(description='download images by tag from flickr (including their license information)')
 arg_parser.add_argument('--directory', help="save images in DIRECTORY")
+arg_parser.add_argument('--csv', default=False, help="save license information in CSV format")
 arg_parser.add_argument('-p', '--pages', dest='pages', type=int, default=1, help="download all images on pages up to PAGES")
 arg_parser.add_argument('--perpage', type=int, default=50, help="search query should have PERPAGES images per page")
 arg_parser.add_argument('--skip', type=int, default=0, help="skip the first SKIP pages")
@@ -68,6 +70,8 @@ if __name__ == '__main__':
 
     flickr = flickrapi.FlickrAPI(api_key=KEYS.API_KEY, secret=KEYS.API_SECRET, format='parsed-json')
     licenses = {x['id']: x for x in flickr.photos.licenses.getInfo()['licenses']['license']}
+    if args.csv:
+        LICENSE_ACTIONS = {str(x): LICENSE_TEXT_DEFAULT_CSV for x in range(1, 7)}
 
     BASE_PATH = ""
     if 'directory' in args and args.directory:
